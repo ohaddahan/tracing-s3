@@ -7,16 +7,14 @@ pub async fn get_file_size(client: &Client, bucket: &str, key: &str) -> anyhow::
     Ok(resp.content_length.unwrap_or(0))
 }
 
-async fn append_to_file_multipart(
+pub async fn append_to_file_multipart(
     client: &Client,
     bucket: &str,
     key: &str,
     // Ensure newline between each line
     content_to_append: &str,
 ) -> anyhow::Result<()> {
-    let offset = get_file_size(client, bucket, key)
-        .await
-        .unwrap_or_else(|_| 0);
+    let offset = get_file_size(client, bucket, key).await.unwrap_or(0);
     let content_to_append = content_to_append.as_bytes().to_vec();
     client
         .put_object()

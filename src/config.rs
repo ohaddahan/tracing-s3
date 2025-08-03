@@ -26,6 +26,7 @@ pub struct Prefix<'a>(pub &'a str);
 pub struct Endpoint<'a>(pub Option<&'a str>);
 
 impl Config {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new<'a>(
         aws_region: Option<&str>,
         aws_access_key: Option<&str>,
