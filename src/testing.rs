@@ -30,17 +30,9 @@ mod tests {
 
     #[tokio::test]
     async fn http_tracing() {
-        let config = Config::new(
-            Some("us-east-1"),
-            Some("hello"),
-            Some("world"),
-            "bucket",
-            "prefix",
-            1,
-            1_000,
-        )
-        .await
-        .unwrap();
+        let config = Config::new(Some("us-east-1"), None, None, None, "prefix", 1, 1_000)
+            .await
+            .unwrap();
 
         let http_log_layer = HttpLogLayer::new(Arc::new(config));
         let subscriber = tracing_subscriber::registry()

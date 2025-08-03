@@ -39,15 +39,14 @@ where
             extensions.insert(Timings::new());
         }
 
-        with_event_from_span!(id, span, "message" = "new", |event| {
+        with_event_from_span!(id, span, "message" = "new", |_event| {
             drop(extensions);
             drop(span);
-            self.on_event(&event, ctx);
+            // self.on_event(&event, ctx);
         });
     }
 
     fn on_event(&self, event: &Event, _ctx: Context<S>) {
-        println!("ON_EVENT");
         let log = json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "level": event.metadata().level().to_string(),
@@ -75,10 +74,10 @@ where
             "message" = "enter",
             "time.busy" = busy,
             "time.idle" = idle,
-            |event| {
+            |_event| {
                 drop(extensions);
                 drop(span);
-                self.on_event(&event, ctx);
+                // self.on_event(&event, ctx);
             }
         );
     }
@@ -101,10 +100,10 @@ where
             "message" = "exit",
             "time.busy" = busy,
             "time.idle" = idle,
-            |event| {
+            |_event| {
                 drop(extensions);
                 drop(span);
-                self.on_event(&event, ctx);
+                // self.on_event(&event, ctx);
             }
         );
     }

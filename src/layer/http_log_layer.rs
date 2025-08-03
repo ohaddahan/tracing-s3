@@ -45,7 +45,6 @@ impl HttpLogLayer {
         let buffer_clone = buffer.clone();
         tokio::spawn(async move {
             while let Some(value) = event_rx.recv().await {
-                println!("value = {:#?}", value);
                 let mut mut_buffer = buffer_clone.write().await;
                 mut_buffer.push(value);
             }

@@ -10,12 +10,10 @@ aws-config = { version = "1.8.3", features = ["behavior-version-latest", "rustls
 aws-sdk-s3 = { version = "1.100.0", features = ["rustls"] }
 aws-types = { version = "1.3.7" }
 aws-credential-types = { version = "1.2.3", features = ["hardcoded-credentials"] }
-aws-sdk-sesv2 = { version = "1.82.0", features = ["test-util", "rustls"] }
-reqwest = { version = "0.12.20", default-features = false, features = ["cookies", "rustls-tls", "json"] }
 serde_json = { version = "1.0.140", features = ["raw_value"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "time", "json"] }
 tracing-serde = { version = "0.2.0" }
 tracing = { version = "0.1.41" }
-tracing-bunyan-formatter = "0.3.10"
-anyhow = "1.0.98"
-chrono = "0.4.41"
+anyhow = { version = "1.0.98" }
+chrono = { version = "0.4.41" }
+dotenv = { version = "0.15.0" }

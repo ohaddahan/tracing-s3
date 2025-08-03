@@ -4,7 +4,13 @@ use aws_credential_types::Credentials;
 use aws_credential_types::provider::SharedCredentialsProvider;
 use aws_sdk_s3::Client;
 use aws_types::region::Region;
+use dotenv::dotenv;
 use std::env;
+
+pub struct CurrentLogObject {
+    pub path: String,
+    pub size: usize,
+}
 
 pub struct Config {
     pub aws_client: Client,
@@ -19,11 +25,12 @@ impl Config {
         aws_region: Option<&str>,
         aws_access_key: Option<&str>,
         aws_secret_access_key: Option<&str>,
-        bucket: &str,
+        bucket: Option<&str>,
         prefix: &str,
         object_size_limit_mb: usize,
         cron_interval_in_ms: usize,
     ) -> anyhow::Result<Self> {
+        dotenv().ok();
         let region = Region::new(
             aws_region
                 .unwrap_or(&env::var("S3_TRACING_AWS_REGION").unwrap_or("us-east-1".to_string()))
@@ -50,7 +57,10 @@ impl Config {
         let aws_client = Client::new(&shared_config);
         Ok(Self {
             aws_client,
-            bucket: bucket.to_string(),
+            bucket: match bucket {
+                Some(bucket) => bucket.to_string(),
+                None => env::var("S3_TRACING_BUCKET")?,
+            },
             prefix: prefix.to_string(),
             object_size_limit_mb,
             cron_interval_in_ms,
