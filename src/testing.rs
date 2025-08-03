@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::config::Config;
+    use crate::config::{Bucket, Config, CronIntervalInMs, Endpoint, ObjectSizeLimitMb, Prefix};
     use crate::layer::http_log_layer::HttpLogLayer;
     use std::sync::Arc;
     use std::time::Duration;
@@ -30,10 +30,18 @@ mod tests {
 
     #[tokio::test]
     async fn http_tracing() {
-        let config = Config::new(Some("us-east-1"), None, None, None, "prefix", 1, 1_000)
-            .await
-            .unwrap();
-
+        let config = Config::new(
+            None,
+            None,
+            None,
+            Bucket(None),
+            Prefix("prefix"),
+            Endpoint(None),
+            ObjectSizeLimitMb(1),
+            CronIntervalInMs(1_000),
+        )
+        .await
+        .unwrap();
         let http_log_layer = HttpLogLayer::new(Arc::new(config));
         let subscriber = tracing_subscriber::registry()
             .with(
