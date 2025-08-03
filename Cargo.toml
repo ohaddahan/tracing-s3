@@ -1,6 +1,6 @@
 [package]
 name = "tracing-s3"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88.0"
 authors = ["Ohad Dahan <ohaddahan@gmail.com>"]
@@ -9,6 +9,7 @@ description = "AWS S3 (Express One) , sending trace logs to S3"
 keywords = ["aws", "s3", "express-one-zone", "logs", "tracing"]
 categories = ["development-tools"]
 repository = "https://github.com/ohaddahan/tracing-s3.git"
+documentation = "https://crates.io/crates/tracing-s3"
 
 [dependencies]
 tokio = { version = "1.47.1", features = ["full"] }
