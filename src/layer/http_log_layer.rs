@@ -10,6 +10,8 @@ use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
+/// Represents the output buffer for log data before it's sent to S3.
+/// Manages buffering, naming, and partitioning of log files.
 pub struct Output {
     name: String,
     size_in_bytes: Arc<AtomicU64>,
@@ -21,6 +23,14 @@ pub struct Output {
 }
 
 impl Output {
+    /// Creates a new Output instance with the specified prefix and postfix.
+    ///
+    /// # Arguments
+    /// * `prefix` - The prefix for log file names
+    /// * `postfix` - The postfix/extension for log file names
+    ///
+    /// # Returns
+    /// A new Output instance with initialized buffer and metadata
     pub fn new(prefix: &str, postfix: &str) -> Self {
         let nonce = Uuid::new_v4().to_string();
         Self {
@@ -34,12 +44,24 @@ impl Output {
         }
     }
 
+    /// Increments the part number and updates the file name.
+    /// Called when the current log file becomes too large and needs to be split.
     pub fn bump_part(&mut self) {
         self.part.fetch_add(1, Ordering::Relaxed);
         let name = Self::gen_name(&self.prefix, self.part(), &self.postfix, &self.nonce);
         self.update_name(&name);
     }
 
+    /// Generates a log file name based on the current date, part number, and configuration.
+    ///
+    /// # Arguments
+    /// * `prefix` - The file name prefix
+    /// * `part` - The part number for file splitting
+    /// * `postfix` - The file extension/postfix
+    /// * `nonce` - A unique identifier for this logging session
+    ///
+    /// # Returns
+    /// A formatted file name in the pattern: YYYY-MM-DD/part/prefix-nonce.postfix
     pub fn gen_name(prefix: &str, part: u64, postfix: &str, nonce: &str) -> String {
         let today = Local::now().date_naive();
         format!(
@@ -48,10 +70,16 @@ impl Output {
         )
     }
 
+    /// Returns the number of log entries currently in the buffer.
     pub async fn buffer_len(&self) -> u64 {
         self.buffer.read().await.len() as u64
     }
 
+    /// Flushes the buffer and returns all buffered log entries as a single string.
+    /// Clears the buffer and resets the size counter after flushing.
+    ///
+    /// # Returns
+    /// A newline-delimited string containing all buffered log entries
     pub async fn flush_buffer(&self) -> String {
         let payload = self.buffer.read().await.join("\n");
         self.buffer.write().await.clear();
@@ -59,6 +87,10 @@ impl Output {
         payload
     }
 
+    /// Appends a log entry to the buffer and updates the size counter.
+    ///
+    /// # Arguments
+    /// * `value` - The log entry to append to the buffer
     pub async fn append_to_buffer(&self, value: String) {
         let size_in_kb = self
             .size_in_bytes
@@ -68,27 +100,40 @@ impl Output {
         self.update_size_in_bytes(size_in_kb);
     }
 
+    /// Returns the current log file name.
     pub fn name(&self) -> String {
         self.name.clone()
     }
 
+    /// Returns the current buffer size in bytes.
     pub fn size_in_bytes(&self) -> u64 {
         self.size_in_bytes.load(Ordering::Relaxed)
     }
 
+    /// Returns the current part number.
     pub fn part(&self) -> u64 {
         self.part.load(Ordering::Relaxed)
     }
 
+    /// Updates the buffer size counter.
+    ///
+    /// # Arguments
+    /// * `size_in_bytes` - The new buffer size in bytes
     pub fn update_size_in_bytes(&self, size_in_bytes: u64) {
         self.size_in_bytes.store(size_in_bytes, Ordering::Relaxed);
     }
 
+    /// Updates the current log file name.
+    ///
+    /// # Arguments
+    /// * `name` - The new file name
     pub fn update_name(&mut self, name: &str) {
         self.name = name.to_string();
     }
 }
 
+/// The main tracing layer that handles log collection and S3 uploading.
+/// Implements the tracing-subscriber Layer trait to integrate with the tracing ecosystem.
 pub struct HttpLogLayer {
     pub output: Arc<RwLock<Output>>,
     pub config: Arc<TracingS3Config>,
@@ -97,6 +142,14 @@ pub struct HttpLogLayer {
 }
 
 impl HttpLogLayer {
+    /// Creates a background task that periodically flushes buffered logs to S3.
+    ///
+    /// # Arguments
+    /// * `config` - The S3 configuration
+    /// * `output` - The shared output buffer
+    ///
+    /// # Returns
+    /// A JoinHandle for the background cron job task
     pub fn cron_job(config: Arc<TracingS3Config>, output: Arc<RwLock<Output>>) -> JoinHandle<()> {
         let buffer_size_limit_kb = config.buffer_size_limit_kb;
         tokio::spawn(async move {
@@ -111,6 +164,16 @@ impl HttpLogLayer {
         })
     }
 
+    /// Creates a new HttpLogLayer instance.
+    ///
+    /// Sets up the background cron job for periodic log flushing and initializes
+    /// the event processing pipeline.
+    ///
+    /// # Arguments
+    /// * `config` - The S3 configuration wrapped in an Arc
+    ///
+    /// # Returns
+    /// A new HttpLogLayer instance ready to receive tracing events
     pub fn new(config: Arc<TracingS3Config>) -> Self {
         let output = Arc::new(RwLock::new(Output::new(&config.prefix, &config.postfix)));
         let (handle_tx, mut handle_rx): (
@@ -145,6 +208,15 @@ impl HttpLogLayer {
         }
     }
 
+    /// Sends buffered logs to S3 and handles file partitioning if necessary.
+    ///
+    /// # Arguments
+    /// * `config` - The S3 configuration
+    /// * `output` - The shared output buffer
+    ///
+    /// # Returns
+    /// * `Ok(())` - If logs were successfully sent
+    /// * `Err(anyhow::Error)` - If the S3 upload operation fails
     pub async fn send_logs(
         config: Arc<TracingS3Config>,
         output: Arc<RwLock<Output>>,
