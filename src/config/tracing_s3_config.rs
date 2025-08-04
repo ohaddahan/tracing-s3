@@ -1,3 +1,6 @@
+use crate::config::types::{
+    Bucket, BufferSizeLimitKb, CronIntervalInMs, Endpoint, ObjectSizeLimitMb, Postfix, Prefix,
+};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
 use aws_types::region::Region;
@@ -5,27 +8,17 @@ use dotenv::dotenv;
 use std::env;
 
 #[derive(Debug)]
-pub struct CurrentLogObject {
-    pub path: String,
-    pub size: usize,
-}
-
-#[derive(Debug)]
-pub struct Config {
+pub struct TracingS3Config {
     pub aws_client: Client,
     pub bucket: String,
     pub prefix: String,
-    pub object_size_limit_mb: usize,
-    pub cron_interval_in_ms: usize,
+    pub postfix: String,
+    pub object_size_limit_mb: u64,
+    pub cron_interval_in_ms: u64,
+    pub buffer_size_limit_mb: u64,
 }
 
-pub struct ObjectSizeLimitMb(pub usize);
-pub struct CronIntervalInMs(pub usize);
-pub struct Bucket<'a>(pub Option<&'a str>);
-pub struct Prefix<'a>(pub &'a str);
-pub struct Endpoint<'a>(pub Option<&'a str>);
-
-impl Config {
+impl TracingS3Config {
     #[allow(clippy::too_many_arguments)]
     pub async fn new<'a>(
         aws_region: Option<&str>,
@@ -33,14 +26,16 @@ impl Config {
         aws_secret_access_key: Option<&str>,
         bucket: Bucket<'a>,
         prefix: Prefix<'a>,
+        postfix: Postfix<'a>,
         endpoint: Endpoint<'a>,
         object_size_limit_mb: ObjectSizeLimitMb,
         cron_interval_in_ms: CronIntervalInMs,
+        buffer_size_limit_mb: BufferSizeLimitKb,
     ) -> anyhow::Result<Self> {
         dotenv().ok();
         let region = Region::new(
             aws_region
-                .unwrap_or(&env::var("S3_TRACING_AWS_REGION").unwrap_or("us-east-1".to_string()))
+                .unwrap_or(&env::var("S3_TRACING_AWS_REGION").unwrap_or("us-west-2".to_string()))
                 .to_string(),
         );
         let bucket = match bucket.0 {
@@ -57,7 +52,6 @@ impl Config {
         };
         let credentials =
             Credentials::new(aws_access_key, aws_secret_access_key, None, None, "AWS");
-        // let cred_provider = SharedCredentialsProvider::new(credentials);
         let mut config_builder = aws_sdk_s3::Config::builder()
             .behavior_version_latest()
             .credentials_provider(credentials.clone())
@@ -73,8 +67,10 @@ impl Config {
             aws_client,
             bucket,
             prefix: prefix.0.to_string(),
-            object_size_limit_mb: object_size_limit_mb.0,
-            cron_interval_in_ms: cron_interval_in_ms.0,
+            postfix: postfix.0.to_string(),
+            object_size_limit_mb: object_size_limit_mb.inner(),
+            cron_interval_in_ms: cron_interval_in_ms.inner(),
+            buffer_size_limit_mb: buffer_size_limit_mb.inner(),
         })
     }
 }

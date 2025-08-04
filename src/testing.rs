@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::config::{Bucket, Config, CronIntervalInMs, Endpoint, ObjectSizeLimitMb, Prefix};
+    use crate::config::tracing_s3_config::TracingS3Config;
+    use crate::config::types::{
+        Bucket, BufferSizeLimitKb, CronIntervalInMs, Endpoint, ObjectSizeLimitMb, Postfix, Prefix,
+    };
     use crate::layer::http_log_layer::HttpLogLayer;
     use std::sync::Arc;
     use std::time::Duration;
@@ -30,15 +33,17 @@ mod tests {
 
     #[tokio::test]
     async fn http_tracing() {
-        let config = Config::new(
+        let config = TracingS3Config::new(
             None,
             None,
             None,
             Bucket(None),
             Prefix("prefix"),
+            Postfix("log"),
             Endpoint(None),
-            ObjectSizeLimitMb(1),
-            CronIntervalInMs(1_000),
+            ObjectSizeLimitMb::new(1).unwrap(),
+            CronIntervalInMs::new(1_000).unwrap(),
+            BufferSizeLimitKb::new(1).unwrap(),
         )
         .await
         .unwrap();
@@ -54,6 +59,6 @@ mod tests {
             let result = add(2, 2);
             assert_eq!(result, 4);
         });
-        tokio::time::sleep(Duration::from_millis(1_000)).await;
+        tokio::time::sleep(Duration::from_millis(10_000)).await;
     }
 }
