@@ -8,13 +8,16 @@ use tracing_serde::AsSerde;
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::Context;
 
-struct Timings {
+/// Structure to track timing information for spans.
+/// Tracks idle and busy time for performance monitoring.
+pub struct Timings {
     idle: u64,
     busy: u64,
     last: Instant,
 }
 
 impl Timings {
+    /// Creates a new Timings instance with zero counters and current timestamp.
     fn new() -> Self {
         Self {
             idle: 0,
