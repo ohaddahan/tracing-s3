@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 pub struct Output {
     name: String,
@@ -16,15 +17,18 @@ pub struct Output {
     part: Arc<AtomicU64>,
     prefix: String,
     postfix: String,
+    nonce: String,
 }
 
 impl Output {
     pub fn new(prefix: &str, postfix: &str) -> Self {
+        let nonce = Uuid::new_v4().to_string();
         Self {
+            name: Self::gen_name(prefix, 0, postfix, &nonce),
+            nonce,
             prefix: prefix.to_string(),
             postfix: postfix.to_string(),
             buffer: Arc::new(RwLock::new(Vec::new())),
-            name: Self::gen_name(prefix, 0, postfix),
             size_in_bytes: Arc::new(AtomicU64::new(0)),
             part: Arc::new(AtomicU64::new(0)),
         }
@@ -32,18 +36,15 @@ impl Output {
 
     pub fn bump_part(&mut self) {
         self.part.fetch_add(1, Ordering::Relaxed);
-        let name = Self::gen_name(&self.prefix, self.part(), &self.postfix);
+        let name = Self::gen_name(&self.prefix, self.part(), &self.postfix, &self.nonce);
         self.update_name(&name);
     }
 
-    pub fn gen_name(prefix: &str, part: u64, postfix: &str) -> String {
+    pub fn gen_name(prefix: &str, part: u64, postfix: &str, nonce: &str) -> String {
         let today = Local::now().date_naive();
         format!(
-            "{}-{}-{}.{}",
-            prefix,
+            "{}/{part}/{prefix}-{nonce}.{postfix}",
             today.format("%Y-%m-%d"),
-            part,
-            postfix
         )
     }
 

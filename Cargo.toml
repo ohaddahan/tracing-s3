@@ -23,3 +23,4 @@ tracing = { version = "0.1.41" }
 anyhow = { version = "1.0.98" }
 chrono = { version = "0.4.41" }
 dotenv = { version = "0.15.0" }
+uuid = { version = "1.17.0", features = ["serde", "v4"] }
