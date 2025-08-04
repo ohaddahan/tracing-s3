@@ -2,13 +2,37 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::ChecksumAlgorithm;
 
+/// Helper utilities for S3 operations.
+/// Provides methods for file size retrieval and appending content to S3 objects.
 pub struct S3Helpers {}
 
 impl S3Helpers {
+    /// Retrieves the size of a file in S3.
+    /// 
+    /// # Arguments
+    /// * `client` - The AWS S3 client
+    /// * `bucket` - The S3 bucket name
+    /// * `key` - The S3 object key
+    /// 
+    /// # Returns
+    /// * `Ok(i64)` - The file size in bytes, or 0 if the file doesn't exist
+    /// * `Err(anyhow::Error)` - If the head object operation fails
     pub async fn get_file_size(client: &Client, bucket: &str, key: &str) -> anyhow::Result<i64> {
         let resp = client.head_object().bucket(bucket).key(key).send().await?;
         Ok(resp.content_length.unwrap_or(0))
     }
+    /// Appends content to an existing S3 object or creates a new one if it doesn't exist.
+    /// Uses S3's write_offset_bytes feature for efficient appending.
+    /// 
+    /// # Arguments
+    /// * `client` - The AWS S3 client
+    /// * `bucket` - The S3 bucket name
+    /// * `key` - The S3 object key
+    /// * `content_to_append` - The content to append to the file
+    /// 
+    /// # Returns
+    /// * `Ok(u64)` - The total file size after appending
+    /// * `Err(anyhow::Error)` - If the append operation fails
     pub async fn append_to_file(
         client: &Client,
         bucket: &str,
