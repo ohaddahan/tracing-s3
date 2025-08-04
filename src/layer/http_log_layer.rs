@@ -137,7 +137,6 @@ impl Output {
 pub struct HttpLogLayer {
     pub output: Arc<RwLock<Output>>,
     pub config: Arc<TracingS3Config>,
-    pub handle_tx: UnboundedSender<JoinHandle<()>>,
     pub event_tx: UnboundedSender<Value>,
 }
 
@@ -176,19 +175,8 @@ impl HttpLogLayer {
     /// A new HttpLogLayer instance ready to receive tracing events
     pub fn new(config: Arc<TracingS3Config>) -> Self {
         let output = Arc::new(RwLock::new(Output::new(&config.prefix, &config.postfix)));
-        let (handle_tx, mut handle_rx): (
-            UnboundedSender<JoinHandle<()>>,
-            UnboundedReceiver<JoinHandle<()>>,
-        ) = mpsc::unbounded_channel();
-
         let (event_tx, mut event_rx): (UnboundedSender<Value>, UnboundedReceiver<Value>) =
             mpsc::unbounded_channel();
-
-        tokio::spawn(async move {
-            while let Some(handle) = handle_rx.recv().await {
-                let _ = handle.await;
-            }
-        });
         let output_clone = output.clone();
         tokio::spawn(async move {
             while let Some(value) = event_rx.recv().await {
@@ -197,12 +185,9 @@ impl HttpLogLayer {
                 }
             }
         });
-
-        let cron_job_handle = Self::cron_job(config.clone(), output.clone());
-        let _ = handle_tx.send(cron_job_handle);
+        Self::cron_job(config.clone(), output.clone());
         Self {
             output,
-            handle_tx,
             config,
             event_tx,
         }
