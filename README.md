@@ -1,10 +1,22 @@
 # S3 Tracing
 
-A Rust crate that provides a [tracing](https://github.com/tokio-rs/tracing) layer for efficiently sending structured logs to AWS S3 Express One Zone buckets.
+A Rust crate that provides a [tracing](https://github.com/tokio-rs/tracing) layer for efficiently sending structured
+logs to [AWS S3 Express One Zone buckets](https://aws.amazon.com/s3/storage-classes/express-one-zone).
+
+## Docs
+
+* [crates.io](https://crates.io/crates/tracing-s3)
+* [docs.rs](https://docs.rs/tracing-s3/latest/tracing_s3/)
+
+## Installation
+
+`cargo add tracing-s3`
 
 ## Features
 
-- **High Performance**: Optimized for AWS S3 Express One Zone storage class for ultra-low latency
+- **High Performance**: Optimized
+  for [AWS S3 Express One Zone storage](https://aws.amazon.com/s3/storage-classes/express-one-zone/) class for ultra-low
+  latency
 - **Buffered Logging**: Smart buffering with configurable size limits and automatic flushing
 - **Structured Output**: JSON-formatted logs with timestamps and span timing information
 - **Configurable**: Environment variable support with programmatic overrides
