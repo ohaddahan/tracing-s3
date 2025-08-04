@@ -9,13 +9,14 @@ impl S3Helpers {
         let resp = client.head_object().bucket(bucket).key(key).send().await?;
         Ok(resp.content_length.unwrap_or(0))
     }
-    pub async fn append_to_file_multipart(
+    pub async fn append_to_file(
         client: &Client,
         bucket: &str,
         key: &str,
         content_to_append: &str,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<u64> {
         let offset = Self::get_file_size(client, bucket, key).await.unwrap_or(0);
+        let total_len = offset as u64 + content_to_append.len() as u64;
         let content_to_append = content_to_append.as_bytes().to_vec();
         client
             .put_object()
@@ -26,7 +27,7 @@ impl S3Helpers {
             .body(ByteStream::from(content_to_append)) // Empty byte array
             .send()
             .await?;
-        Ok(())
+        Ok(total_len)
     }
 }
 
@@ -57,14 +58,13 @@ mod tests {
         .await
         .unwrap();
         for _ in 0..5 {
-            let result = S3Helpers::append_to_file_multipart(
+            let _result = S3Helpers::append_to_file(
                 &config.aws_client,
                 &config.bucket,
                 "check-file-exists.log",
                 &format!("hello world {}\n", Utc::now()),
             )
             .await;
-            println!("append_to_file_test result => {result:?}");
         }
     }
 }

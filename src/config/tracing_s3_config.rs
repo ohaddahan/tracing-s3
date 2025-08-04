@@ -15,7 +15,7 @@ pub struct TracingS3Config {
     pub postfix: String,
     pub object_size_limit_mb: u64,
     pub cron_interval_in_ms: u64,
-    pub buffer_size_limit_mb: u64,
+    pub buffer_size_limit_kb: u64,
 }
 
 impl TracingS3Config {
@@ -70,7 +70,7 @@ impl TracingS3Config {
             postfix: postfix.0.to_string(),
             object_size_limit_mb: object_size_limit_mb.inner(),
             cron_interval_in_ms: cron_interval_in_ms.inner(),
-            buffer_size_limit_mb: buffer_size_limit_mb.inner(),
+            buffer_size_limit_kb: buffer_size_limit_mb.inner(),
         })
     }
 }

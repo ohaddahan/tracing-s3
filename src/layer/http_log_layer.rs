@@ -1,5 +1,6 @@
 use crate::config::tracing_s3_config::TracingS3Config;
 use crate::s3_helpers::S3Helpers;
+use chrono::Local;
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,41 +9,109 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::sync::{RwLock, mpsc};
 use tokio::task::JoinHandle;
 
+pub struct Output {
+    name: String,
+    size_in_bytes: Arc<AtomicU64>,
+    buffer: Arc<RwLock<Vec<String>>>,
+    part: Arc<AtomicU64>,
+    prefix: String,
+    postfix: String,
+}
+
+impl Output {
+    pub fn new(prefix: &str, postfix: &str) -> Self {
+        Self {
+            prefix: prefix.to_string(),
+            postfix: postfix.to_string(),
+            buffer: Arc::new(RwLock::new(Vec::new())),
+            name: Self::gen_name(prefix, 0, postfix),
+            size_in_bytes: Arc::new(AtomicU64::new(0)),
+            part: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub fn bump_part(&mut self) {
+        self.part.fetch_add(1, Ordering::Relaxed);
+        let name = Self::gen_name(&self.prefix, self.part(), &self.postfix);
+        self.update_name(&name);
+    }
+
+    pub fn gen_name(prefix: &str, part: u64, postfix: &str) -> String {
+        let today = Local::now().date_naive();
+        format!(
+            "{}-{}-{}.{}",
+            prefix,
+            today.format("%Y-%m-%d"),
+            part,
+            postfix
+        )
+    }
+
+    pub async fn buffer_len(&self) -> u64 {
+        self.buffer.read().await.len() as u64
+    }
+
+    pub async fn flush_buffer(&self) -> String {
+        let payload = self.buffer.read().await.join("\n");
+        self.buffer.write().await.clear();
+        self.update_size_in_bytes(0);
+        payload
+    }
+
+    pub async fn append_to_buffer(&self, value: String) {
+        let size_in_kb = self
+            .size_in_bytes
+            .fetch_add(value.len() as u64, Ordering::Relaxed);
+        let mut mut_buffer = self.buffer.write().await;
+        mut_buffer.push(value);
+        self.update_size_in_bytes(size_in_kb);
+    }
+
+    pub fn name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn size_in_bytes(&self) -> u64 {
+        self.size_in_bytes.load(Ordering::Relaxed)
+    }
+
+    pub fn part(&self) -> u64 {
+        self.part.load(Ordering::Relaxed)
+    }
+
+    pub fn update_size_in_bytes(&self, size_in_bytes: u64) {
+        self.size_in_bytes.store(size_in_bytes, Ordering::Relaxed);
+    }
+
+    pub fn update_name(&mut self, name: &str) {
+        self.name = name.to_string();
+    }
+}
+
 pub struct HttpLogLayer {
+    pub output: Arc<RwLock<Output>>,
     pub config: Arc<TracingS3Config>,
-    pub buffer: Arc<RwLock<Vec<String>>>,
-    pub buffer_size_bytes: Arc<AtomicU64>,
     pub handle_tx: UnboundedSender<JoinHandle<()>>,
     pub event_tx: UnboundedSender<Value>,
 }
 
 impl HttpLogLayer {
-    pub fn cron_job(
-        config: Arc<TracingS3Config>,
-        buffer: Arc<RwLock<Vec<String>>>,
-        buffer_size_bytes: Arc<AtomicU64>,
-        buffer_size_limit_mb: u64,
-    ) -> JoinHandle<()> {
+    pub fn cron_job(config: Arc<TracingS3Config>, output: Arc<RwLock<Output>>) -> JoinHandle<()> {
+        let buffer_size_limit_kb = config.buffer_size_limit_kb;
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_millis(config.cron_interval_in_ms)).await;
-                let buffer_len = buffer.read().await.len();
-                if buffer_len > 0
-                    || buffer_size_bytes.load(Ordering::Relaxed) * 1_000 > buffer_size_limit_mb
-                {
-                    HttpLogLayer::send_logs(
-                        config.clone(),
-                        buffer.clone(),
-                        buffer_size_bytes.clone(),
-                    )
-                    .await;
+                let buffer_len = output.read().await.buffer_len().await;
+                let size_in_bytes = output.read().await.size_in_bytes();
+                if buffer_len > 0 || size_in_bytes * 1_024 >= buffer_size_limit_kb {
+                    let _ = HttpLogLayer::send_logs(config.clone(), output.clone()).await;
                 }
             }
         })
     }
 
     pub fn new(config: Arc<TracingS3Config>) -> Self {
-        let buffer: Arc<RwLock<Vec<String>>> = Arc::new(RwLock::new(Vec::new()));
+        let output = Arc::new(RwLock::new(Output::new(&config.prefix, &config.postfix)));
         let (handle_tx, mut handle_rx): (
             UnboundedSender<JoinHandle<()>>,
             UnboundedReceiver<JoinHandle<()>>,
@@ -56,49 +125,36 @@ impl HttpLogLayer {
                 let _ = handle.await;
             }
         });
-        let buffer_size_bytes = Arc::new(AtomicU64::new(0));
-        let buffer_size_bytes_clone = buffer_size_bytes.clone();
-        let buffer_clone = buffer.clone();
+        let output_clone = output.clone();
         tokio::spawn(async move {
             while let Some(value) = event_rx.recv().await {
                 if let Ok(v) = serde_json::to_string(&value) {
-                    let mut mut_buffer = buffer_clone.write().await;
-                    buffer_size_bytes_clone.fetch_add(v.len() as u64, Ordering::Relaxed);
-                    mut_buffer.push(v);
+                    output_clone.read().await.append_to_buffer(v).await;
                 }
             }
         });
 
-        let cron_job_handle = Self::cron_job(
-            config.clone(),
-            buffer.clone(),
-            buffer_size_bytes.clone(),
-            config.buffer_size_limit_mb,
-        );
+        let cron_job_handle = Self::cron_job(config.clone(), output.clone());
         let _ = handle_tx.send(cron_job_handle);
         Self {
+            output,
             handle_tx,
             config,
-            buffer,
             event_tx,
-            buffer_size_bytes,
         }
     }
 
     pub async fn send_logs(
         config: Arc<TracingS3Config>,
-        buffer: Arc<RwLock<Vec<String>>>,
-        buffer_size_bytes: Arc<AtomicU64>,
-    ) {
-        let payload = buffer.read().await.join("\n");
-        buffer.write().await.clear();
-        let _ = S3Helpers::append_to_file_multipart(
-            &config.aws_client,
-            &config.bucket,
-            &config.prefix,
-            &payload,
-        )
-        .await;
-        buffer_size_bytes.store(0, Ordering::Relaxed);
+        output: Arc<RwLock<Output>>,
+    ) -> anyhow::Result<()> {
+        let payload = output.read().await.flush_buffer().await;
+        let name = output.read().await.name();
+        let total_size =
+            S3Helpers::append_to_file(&config.aws_client, &config.bucket, &name, &payload).await?;
+        if total_size > config.buffer_size_limit_kb * 1_024 {
+            output.write().await.bump_part();
+        }
+        Ok(())
     }
 }

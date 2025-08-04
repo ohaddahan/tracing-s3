@@ -56,8 +56,14 @@ mod tests {
             .with(tracing_subscriber::fmt::layer().with_ansi(false))
             .with(http_log_layer);
         with_default(&Dispatch::new(subscriber), || {
-            let result = add(2, 2);
-            assert_eq!(result, 4);
+            tracing::info!("Info test");
+            tracing::warn!("Warn test");
+            tracing::debug!("Debug test");
+            tracing::error!("Error test");
+            for i in 0..500 {
+                let result = add(2, i);
+                assert_eq!(result, 2 + i);
+            }
         });
         tokio::time::sleep(Duration::from_millis(10_000)).await;
     }
